@@ -4,14 +4,20 @@ import os
 import matplotlib.pyplot as plt
 import time
 import concurrent.futures
+import random
+import shutil
 
-
-data_dir = (os.getcwd()+'\\Data\\')
+data_dir = (os.getcwd()+'\\data\\raw\\')
 files_list = os.listdir(data_dir)
-output_dir = (os.getcwd()+'\\Output\\')
+output_dir = (os.getcwd()+'\\data\\processed\\')
+
+train_dir = os.path.join(output_dir,  'train')
+test_dir = os.path.join(output_dir, 'test')
+os.makedirs(train_dir, exist_ok=True)
+os.makedirs(test_dir, exist_ok=True)
 
 def write_image(image, output_path):
-    if output_path == 'FILTERED RECTANGLES.jpg':
+    if output_path == 'FILTERED RECTANGLE.jpg':
         cv.imwrite(f'({time.time()}) - {output_path}', image)
 
 def to_gray(image):
@@ -234,7 +240,7 @@ def crop_cells(filtered_rectangles, no_lines, folder_num=0):
             # Crop the image to the bounding rectangle
             cropped_image = no_lines[y+crop_amount:y+h-crop_amount, x+crop_amount:x+w-crop_amount]
             cropped_image = cv.resize(cropped_image, target_size)
-
+            cropped_image = cv.bitwise_not(cropped_image)
             
             # Save the cropped image to the file system
             filename = os.path.join(new_dir, f'image_{i}.jpg')
@@ -256,6 +262,46 @@ def process_file(file, file_num ,is_seq=False):
     else:
         crop_cells(filtered_rectangles, no_lines, (file_num*12)+1)        
 
+def train_test_split():
+    # Iterate through each numbered folder in the processed directory
+    for folder_name in os.listdir(output_dir):
+        folder_path = os.path.join(output_dir, folder_name)
+        if os.path.isdir(folder_path) and folder_name.isdigit():
+            images = [f for f in os.listdir(folder_path) if f.endswith('.jpg')]
+            
+            # Ensure there are exactly 4 images in the folder
+            if len(images) == 4:
+                random.shuffle(images)
+
+                test_image = images[0]
+                train_images = images[1:]
+                
+                # Create respective folders in the test and train directories
+                test_folder = os.path.join(test_dir, folder_name)
+                train_folder = os.path.join(train_dir, folder_name)
+                os.makedirs(test_folder, exist_ok=True)
+                os.makedirs(train_folder, exist_ok=True)
+                
+                # Move the test image
+                test_image_src = os.path.join(folder_path, test_image)
+                test_image_dst = os.path.join(test_folder, test_image)
+                shutil.copy(test_image_src, test_image_dst)
+                
+                # Move the train images
+                for train_image in train_images:
+                    train_image_src = os.path.join(folder_path, train_image)
+                    train_image_dst = os.path.join(train_folder, train_image)
+                    shutil.copy(train_image_src, train_image_dst)
+            else:
+                print(f"Folder {folder_name} does not contain exactly 4 images.")
+
+    print("Data split into train and test sets successfully.")
+
+def remove_folders():
+    for folder_name in os.listdir(output_dir):
+        folder_path = os.path.join(output_dir, folder_name)
+        if os.path.isdir(folder_path) and folder_name.isdigit():
+            shutil.rmtree(folder_path)
 
 def sequential_processing():
     for file in files_list:
@@ -263,6 +309,7 @@ def sequential_processing():
 
 def parallel_processing():
     files_list = os.listdir(data_dir)
+    # files_list = files_list[:2]
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = [executor.submit(process_file, file, file_num) for file_num, file in enumerate(files_list)]
         for future in concurrent.futures.as_completed(futures):
@@ -274,6 +321,9 @@ def parallel_processing():
 
 def main():
     parallel_processing()
+    train_test_split()
+    remove_folders()
+
 
 if __name__ == "__main__":
     main()
