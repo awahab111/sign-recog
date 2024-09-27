@@ -163,5 +163,6 @@ cython_debug/
 
 
 # Folders 
-# data/
+data/
 !src/data
+.virtual_documents/
